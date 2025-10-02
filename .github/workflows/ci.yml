@@ -1,13 +1,13 @@
-name: CI - Python Tests
+name: CI/CD Pipeline for FastAPI Service
 
 on:
   push:
     branches:
       - main
-    # Déclenchement sur changements pertinents uniquement
     paths:
       - '**/*.py'
       - 'requirements.txt'
+      - 'Dockerfile' # Ajouté pour déclencher le build Docker si la recette change
       - '.github/workflows/**'
   pull_request:
     branches:
@@ -15,9 +15,13 @@ on:
     paths:
       - '**/*.py'
       - 'requirements.txt'
+      - 'Dockerfile'
       - '.github/workflows/**'
 
 jobs:
+  # -----------------------------------------------------------
+  # JOB 1: Continuous Integration (CI) - Tests et qualité du code
+  # -----------------------------------------------------------
   test:
     runs-on: ubuntu-latest
     
@@ -25,30 +29,62 @@ jobs:
       - name: ⬇️ Checkout code
         uses: actions/checkout@v4
 
-      # 💡 Bonne pratique : Utiliser une version de Python supportée par l'environnement GitHub
-      # Python 3.13.7 n'est pas encore disponible sur tous les runners. 
-      # Je recommande 3.11 ou 3.12, ou 3.10 si vous voulez être plus sûr. 
-      # Je laisse 3.13.7 si c'est vraiment votre version locale, mais soyez prêt à la changer.
       - name: 🐍 Set up Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13.7"
+          # AVERTISSEMENT : Utilisez une version supportée par l'environnement local et CI. 
+          # 3.11 est souvent plus stable sur les runners.
+          python-version: "3.13" 
 
       - name: ⚙️ Install dependencies
         run: |
-          # Toujours mettre à jour pip
           python -m pip install --upgrade pip
-          
-          # Installer toutes les dépendances (y compris les dépendances de test comme httpx)
-          # à partir du fichier requirements.txt allégé.
+          # Installation des dépendances à partir du fichier requirements.txt propre
           pip install -r requirements.txt
-          
-          # ❌ Suppression des lignes 'pip install pytest pytest-mock httpx' : 
-          # Ces packages DOIVENT être listés dans requirements.txt pour être bien versionnés.
-          # S'ils sont déjà dans requirements.txt, cette double installation est inutile.
-          
 
       - name: 🧪 Run tests
         run: |
+          # Correction du ModuleNotFoundError : Ajoutez le répertoire courant au chemin Python.
           PYTHONPATH=. pytest tests/
-        
+
+
+  # -----------------------------------------------------------
+  # JOB 2: Continuous Deployment (CD) - Build et Push Docker
+  # -----------------------------------------------------------
+  build_and_push_docker:
+    needs: test # Ne s'exécute QUE si le job 'test' a réussi (CD = CI SÛRE)
+    runs-on: ubuntu-latest
+    
+    # Permissions nécessaires pour publier l'image conteneur sur GHCR
+    permissions:
+      contents: read
+      packages: write 
+      
+    steps:
+      - name: ⬇️ Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Log in to GitHub Container Registry (GHCR)
+        # Nécessaire pour l'étape de 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }} # Votre nom d'utilisateur GitHub
+          password: ${{ secrets.GITHUB_TOKEN }} # Token généré automatiquement
+
+      - name: 🏷️ Définir les Tags de l'Image Docker
+        # Taguer l'image avec le SHA court du commit (pour la traçabilité)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }} 
+          tags: |
+            type=sha,prefix=,suffix=,format=short
+
+      - name: 🛠️ Build and Push Docker image
+        # Utilise la recette du Dockerfile et la pousse au registre
+        uses: docker/build-push-action@v5
+        with:
+          context: . 
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
