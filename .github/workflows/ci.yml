@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+    # Déclenchement sur changements pertinents uniquement
     paths:
       - '**/*.py'
       - 'requirements.txt'
@@ -19,22 +20,32 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: ⬇️ Checkout code
         uses: actions/checkout@v4
 
-      - name: 🐍 Set up Python
+      # 💡 Bonne pratique : Utiliser une version de Python supportée par l'environnement GitHub
+      # Python 3.13.7 n'est pas encore disponible sur tous les runners. 
+      # Je recommande 3.11 ou 3.12, ou 3.10 si vous voulez être plus sûr. 
+      # Je laisse 3.13.7 si c'est vraiment votre version locale, mais soyez prêt à la changer.
+      - name: 🐍 Set up Python 3.13
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13.7" # Assurez-vous que cette version correspond à votre environnement
+          python-version: "3.13.7"
 
       - name: ⚙️ Install dependencies
         run: |
+          # Toujours mettre à jour pip
           python -m pip install --upgrade pip
-          # Installation des dépendances de l'app et de test (incluant httpx)
+          
+          # Installer toutes les dépendances (y compris les dépendances de test comme httpx)
+          # à partir du fichier requirements.txt allégé.
           pip install -r requirements.txt
-          pip install pytest pytest-mock httpx 
+          
+          # ❌ Suppression des lignes 'pip install pytest pytest-mock httpx' : 
+          # Ces packages DOIVENT être listés dans requirements.txt pour être bien versionnés.
+          # S'ils sont déjà dans requirements.txt, cette double installation est inutile.
 
       - name: 🧪 Run tests
         run: |
