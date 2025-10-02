@@ -1,0 +1,13 @@
+# 
+.venv/
+__pycache__/
+.env
+*.pyc
+
+# Commandes Git
+git add .
+git commit -m "feat: setup initial FastAPI app, tests, and CI workflow"
+
+# git remote add origin <URL de votre repo>
+# git branch -M main
+# git push -u origin main
