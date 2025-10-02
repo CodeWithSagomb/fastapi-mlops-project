@@ -46,7 +46,9 @@ jobs:
           # ❌ Suppression des lignes 'pip install pytest pytest-mock httpx' : 
           # Ces packages DOIVENT être listés dans requirements.txt pour être bien versionnés.
           # S'ils sont déjà dans requirements.txt, cette double installation est inutile.
+          
 
       - name: 🧪 Run tests
         run: |
-          pytest tests/
+          PYTHONPATH=. pytest tests/
+        
