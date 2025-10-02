@@ -1,0 +1,13 @@
+# k8s/service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-ml-service
+spec:
+  selector:
+    app: ml-api # Sélectionne les pods créés par notre Deployment
+  ports:
+    - protocol: TCP
+      port: 80 # Le port que les utilisateurs vont atteindre (ex: HTTP standard)
+      targetPort: 8000 # Le port sur lequel le conteneur écoute (Uvicorn)
+  type: LoadBalancer # Pour une exposition publique avec une IP externe (dépend de l'environnement)

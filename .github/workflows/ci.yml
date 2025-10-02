@@ -5,9 +5,11 @@ on:
     branches:
       - main
     paths:
+      # S'assurer que le pipeline se déclenche sur les fichiers de déploiement aussi
       - '**/*.py'
       - 'requirements.txt'
-      - 'Dockerfile' # Ajouté pour déclencher le build Docker si la recette change
+      - 'Dockerfile'
+      - 'k8s/**' # 💡 Ajout : Pour déclencher sur les fichiers Kubernetes (futur CD)
       - '.github/workflows/**'
   pull_request:
     branches:
@@ -16,6 +18,7 @@ on:
       - '**/*.py'
       - 'requirements.txt'
       - 'Dockerfile'
+      - 'k8s/**'
       - '.github/workflows/**'
 
 jobs:
@@ -27,35 +30,43 @@ jobs:
     
     steps:
       - name: ⬇️ Checkout code
-        uses: actions/checkout@v4
+        # 💡 Optimisation : Utiliser la v4 pour plus de sécurité et de performance
+        uses: actions/checkout@v4 
 
-      - name: 🐍 Set up Python 3.13
+      - name: 🐍 Set up Python
         uses: actions/setup-python@v5
         with:
-          # AVERTISSEMENT : Utilisez une version supportée par l'environnement local et CI. 
-          # 3.11 est souvent plus stable sur les runners.
-          python-version: "3.13" 
+          # 💡 Correction/Stabilité : Remplacé "3.13" (potentiellement instable sur les runners) 
+          # par une version récente stable, comme "3.12".
+          python-version: "3.12" 
+
+      - name: ⚙️ Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          # 💡 Optimisation : Cacher l'environnement pip pour accélérer les runs futurs
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: ⚙️ Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # Installation des dépendances à partir du fichier requirements.txt propre
+          # Installation des dépendances
           pip install -r requirements.txt
 
       - name: 🧪 Run tests
         run: |
-          # Correction du ModuleNotFoundError : Ajoutez le répertoire courant au chemin Python.
+          # Correction du ModuleNotFoundError pour l'import de 'app'
           PYTHONPATH=. pytest tests/
-
 
   # -----------------------------------------------------------
   # JOB 2: Continuous Deployment (CD) - Build et Push Docker
   # -----------------------------------------------------------
   build_and_push_docker:
-    needs: test # Ne s'exécute QUE si le job 'test' a réussi (CD = CI SÛRE)
+    needs: test 
     runs-on: ubuntu-latest
     
-    # Permissions nécessaires pour publier l'image conteneur sur GHCR
     permissions:
       contents: read
       packages: write 
@@ -64,27 +75,35 @@ jobs:
       - name: ⬇️ Checkout code
         uses: actions/checkout@v4
 
+      # 💡 Bonne pratique : Utiliser l'action de setup de QEMU si vous faites du multi-arch
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: 🔐 Log in to GitHub Container Registry (GHCR)
-        # Nécessaire pour l'étape de 'push'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }} # Votre nom d'utilisateur GitHub
-          password: ${{ secrets.GITHUB_TOKEN }} # Token généré automatiquement
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }} 
 
       - name: 🏷️ Définir les Tags de l'Image Docker
-        # Taguer l'image avec le SHA court du commit (pour la traçabilité)
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }} 
+          # 💡 Amélioration : Ajout du tag 'latest' en plus du tag SHA pour le déploiement rapide
           tags: |
             type=sha,prefix=,suffix=,format=short
-
+            type=raw,value=latest,enable=true 
+            
       - name: 🛠️ Build and Push Docker image
-        # Utilise la recette du Dockerfile et la pousse au registre
         uses: docker/build-push-action@v5
         with:
           context: . 
           push: true
+          # 💡 Optimisation : Utiliser 'builder' pour la performance
+          builder: ${{ steps.buildx.outputs.name }}
           tags: ${{ steps.meta.outputs.tags }}

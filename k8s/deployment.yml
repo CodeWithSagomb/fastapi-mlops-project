@@ -1,0 +1,44 @@
+# k8s/deployment.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-ml-deployment
+  labels:
+    app: ml-api
+spec:
+  replicas: 2 # Bonne pratique MLOps : deux instances pour la haute disponibilité
+  selector:
+    matchLabels:
+      app: ml-api
+  template:
+    metadata:
+      labels:
+        app: ml-api
+    spec:
+      # K8s doit s'authentifier auprès de GHCR.
+      # Si vous utilisez un K8s managé (GKE, EKS, AKS), des configurations spécifiques
+      # pour le Pull Secret (imagePullSecrets) seraient nécessaires ici.
+      containers:
+      - name: ml-api-container
+        # 🚨 Mettez votre chemin complet ici : ghcr.io/<votre-user>/<votre-repo>:<sha-tag>
+        image: ghcr.io/CodeWithSagomb/fastapi-mlops-project:latest
+        imagePullPolicy: Always 
+        ports:
+        - containerPort: 8000
+        resources:
+          limits: # Définition des limites (essentiel pour la stabilité du cluster)
+            memory: "512Mi"
+            cpu: "500m" # 0.5 CPU core
+        
+        # Probes : Crucial pour K8s pour gérer le trafic et les redémarrages
+        livenessProbe: # Est-ce que le conteneur doit être redémarré ?
+          httpGet:
+            path: /health # Utiliser notre route de santé
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe: # Est-ce que le conteneur est prêt à recevoir du trafic ?
+          httpGet:
+            path: /health
+            port: 8000
+          periodSeconds: 5
